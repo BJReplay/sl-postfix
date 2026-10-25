@@ -1,9 +1,9 @@
 FROM alpine:3
 
-ARG CERTBOT_VERSION=5.1.0
+ARG CERTBOT_VERSION=5.6
 ARG PYTHON_VERSION=3.14
-ARG POSTFIX_VERSION=3.10.5
-ARG DCRON_VERSION=4.5
+ARG POSTFIX_VERSION=3.11
+ARG DCRON_VERSION=4.6
 
 # set version label
 ARG BUILD_DATE
@@ -16,8 +16,10 @@ VOLUME /etc/letsencrypt
 
 # Install system dependencies.
 RUN apk add --update --no-cache \
-    # Postfix itself:
+    # Postfix itself and database engines:
     postfix>=${POSTFIX_VERSION} postfix-pgsql>=${POSTFIX_VERSION} \
+    # CRITICAL FIX: Required for outward SASL relay authentication
+    cyrus-sasl cyrus-sasl-login \
     # To generate Postfix config files:
     python3>=${PYTHON_VERSION} \
     # To generate and renew Postfix TLS certificate:
@@ -42,4 +44,3 @@ WORKDIR /src
 HEALTHCHECK --start-period=350s CMD /usr/sbin/postfix status
 
 CMD ["./docker-entrypoint.sh"]
-

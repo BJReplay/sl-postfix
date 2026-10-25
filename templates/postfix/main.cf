@@ -20,7 +20,7 @@ compatibility_level = 3.6
 # TLS parameters for SMTP (outgoing mail)
 smtp_tls_security_level = may
 
-# TLS parameters for SMPTD (incoming mail)
+# TLS parameters for SMTPD (incoming mail)
 {% if tls %}
 smtpd_tls_security_level = may
 smtpd_tls_cert_file = {{ tls_cert }}
@@ -68,13 +68,16 @@ smtpd_sender_restrictions =
     reject_unknown_sender_domain,
     permit
 
+# Strict relay rules to close the open relay loophole:
+smtpd_relay_restrictions =
+    reject_unauth_pipelining,
+    permit_mynetworks,
+    reject_unauth_destination
+
 # Recipient restrictions:
 smtpd_recipient_restrictions =
-   reject_unauth_pipelining,
    reject_non_fqdn_recipient,
    reject_unknown_recipient_domain,
-   permit_mynetworks,
-   reject_unauth_destination,
    {% if use_dqn %}
    # Add in dqn RBLs
    reject_rbl_client {{ env['POSTFIX_DQN_KEY'] }}.zen.dq.spamhaus.net=127.0.0.[2..11],
@@ -107,7 +110,7 @@ smtp_tls_mandatory_protocols = !SSLv2,!SSLv3,!TLSv1
 smtp_tls_mandatory_ciphers = high
 smtpd_tls_mandatory_ciphers = high
 
-# Disable depricated encryption ciphers
+# Disable deprecated encryption ciphers
 smtpd_tls_mandatory_exclude_ciphers = MD5, DES, ADH, RC4, PSD, SRP, 3DES, eNULL, aNULL
 smtpd_tls_exclude_ciphers = MD5, DES, ADH, RC4, PSD, SRP, 3DES, eNULL, aNULL
 smtp_tls_mandatory_exclude_ciphers = MD5, DES, ADH, RC4, PSD, SRP, 3DES, eNULL, aNULL
@@ -118,27 +121,34 @@ tls_preempt_cipherlist = yes
 tls_ssl_options = NO_RENEGOTIATION
 
 {% if relay_host_port %}
-# Set email relay host with port:
-relayhost = {{ env['RELAY_HOST'] }}:{{ env['RELAY_PORT'] }}
+# Set email relay host with port (using brackets to prevent MX loop lookups):
+relayhost = [{{ env['RELAY_HOST'] }}]:{{ env['RELAY_PORT'] }}
 {% endif %}
 
 {% if relay_host_only %}
-# Set email relay host:
-relayhost = {{ env['RELAY_HOST'] }}
+# Set email relay host (using brackets to prevent MX loop lookups):
+relayhost = [{{ env['RELAY_HOST'] }}]
 {% endif %}
 
 {% if relay_creds %}
 # Enable auth
 smtp_sasl_auth_enable = yes
-# Set username and password
-smtp_sasl_password_maps = static:{{ env['RELAY_HOST_USERNAME'] }}:{{ env['RELAY_HOST_PASSWORD'] }}
-smtp_sasl_security_options = noanonymous
+
+# Set username and password using inline maps to protect the @ symbol and colons from splitting bugs
+{% if relay_host_port %}
+smtp_sasl_password_maps = inline:{ [{{ env['RELAY_HOST'] }}]:{{ env['RELAY_PORT'] }}={{ env['RELAY_HOST_USERNAME'] }}:{{ env['RELAY_HOST_PASSWORD'] }} }
+{% else %}
+smtp_sasl_password_maps = inline:{ [{{ env['RELAY_HOST'] }}]={{ env['RELAY_HOST_USERNAME'] }}:{{ env['RELAY_HOST_PASSWORD'] }} }
+{% endif %}
+
+smtp_sasl_security_options = noanonymous, noplaintext
+smtp_sasl_tls_security_options = noanonymous
 # Turn on tls encryption
 #smtp_tls_security_level = encrypt
 #header_size_limit = 4096000
 {% endif %}
 
 {% if proxy_protocol %}
-# Enable Proxy Protocal if postfix is behind a reverse proxy that can use Proxy Protocol like trafik or haproxy.
+# Enable Proxy Protocol if postfix is behind a reverse proxy that can use Proxy Protocol like traefik or haproxy.
 smtpd_upstream_proxy_protocol = haproxy
 {% endif %}
